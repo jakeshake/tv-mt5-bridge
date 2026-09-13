@@ -1,0 +1,19 @@
+; Default input values for TradingViewZeroMQExecutor.mq5
+; Load via MT5: right-click EA on chart > Properties > Inputs tab > Load.
+; Tune MagicNumber / MaxSpreadPips / lot sizing for your own broker and risk
+; tolerance before going live -- these are reasonable starting defaults, not
+; a recommendation.
+ZmqBindAddress=tcp://*:5555
+ZmqTimeoutMs=10
+MagicNumber=777777
+DefaultLotSize=0.01
+Slippage=3
+TimerIntervalMs=10
+EnableLogging=true
+EnableSpreadFilter=true
+MaxSpreadPips=3.0
+EnableSpreadRetry=true
+SpreadRetryAttempts=5
+SpreadRetryDelayMs=2000
+EnableLimitOrders=true
+LimitOrderExpiryMin=0

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>tv-mt5-signal-bridge</Name>
+  <Repository>ghcr.io/jakeshake/tv-mt5-bridge-signal-bridge:latest</Repository>
+  <Registry>https://github.com/jakeshake/tv-mt5-bridge/pkgs/container/tv-mt5-bridge-signal-bridge</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/jakeshake/tv-mt5-bridge/issues</Support>
+  <Project>https://github.com/jakeshake/tv-mt5-bridge</Project>
+  <Overview>Receives TradingView webhook alerts and pushes them over ZeroMQ to the mt5-windows container's Expert Advisor. Part of tv-mt5-bridge -- a self-hosted TradingView-to-MT5 bridge. Requires a shared webhook secret and the mt5-windows container running alongside it.</Overview>
+  <Category>Other:</Category>
+  <WebUI>http://[IP]:[PORT:5000]/health</WebUI>
+  <Icon>https://raw.githubusercontent.com/jakeshake/tv-mt5-bridge/main/docs/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Install and start mt5-windows first, then set ZMQ_HOST below to its container name or IP.</Requires>
+  <Config Name="WebUI Port" Target="5000" Default="5000" Mode="tcp" Description="Flask webhook port" Type="Port" Display="always" Required="true" Mask="false">5000</Config>
+  <Config Name="ZMQ_HOST" Target="ZMQ_HOST" Default="mt5-windows" Mode="" Description="Host/IP of the mt5-windows container running the EA" Type="Variable" Display="always" Required="true" Mask="false">mt5-windows</Config>
+  <Config Name="ZMQ_PORT" Target="ZMQ_PORT" Default="5555" Mode="" Description="ZeroMQ PULL port the EA listens on" Type="Variable" Display="always" Required="true" Mask="false">5555</Config>
+  <Config Name="WEBHOOK_SECRET" Target="WEBHOOK_SECRET" Default="" Mode="" Description="Long random string. Must match the secret= field in your TradingView alerts. Generate with: openssl rand -hex 32" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="REQUIRE_WEBHOOK_SECRET" Target="REQUIRE_WEBHOOK_SECRET" Default="true" Mode="" Description="Leave true for anything reachable from the internet. Only set false for local-only testing." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="Logs" Target="/logs" Default="/mnt/user/appdata/tv-mt5-signal-bridge/logs" Mode="rw" Description="Webhook log storage" Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/tv-mt5-signal-bridge/logs</Config>
+</Container>

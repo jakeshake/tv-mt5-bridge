@@ -1,0 +1,8 @@
+.env
+data/
+*.log
+__pycache__/
+*.pyc
+
+# Never commit real MT5/broker credentials or overrides of the default preset
+mt5-windows/oem/*.local.set

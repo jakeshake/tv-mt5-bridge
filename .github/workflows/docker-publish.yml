@@ -1,0 +1,37 @@
+name: Build and publish signal-bridge image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "signal-bridge/**"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: ${{ github.repository_owner }}/tv-mt5-bridge-signal-bridge
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./signal-bridge
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}

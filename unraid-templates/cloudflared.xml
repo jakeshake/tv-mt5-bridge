@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>tv-mt5-cloudflared</Name>
+  <Repository>cloudflare/cloudflared:latest</Repository>
+  <Registry>https://hub.docker.com/r/cloudflare/cloudflared</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/jakeshake/tv-mt5-bridge/issues</Support>
+  <Project>https://github.com/jakeshake/tv-mt5-bridge</Project>
+  <Overview>Cloudflare Tunnel connector that exposes the signal-bridge webhook to the internet with a stable HTTPS URL and no port-forwarding. Create the tunnel and token in the Cloudflare Zero Trust dashboard first -- see docs/cloudflare-tunnel-setup.md in the tv-mt5-bridge repo.</Overview>
+  <Category>Other:</Category>
+  <WebUI/>
+  <Icon>https://raw.githubusercontent.com/jakeshake/tv-mt5-bridge/main/docs/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs>tunnel run</PostArgs>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Create a tunnel in the Cloudflare Zero Trust dashboard and point its public hostname at signal-bridge:5000 before starting this container.</Requires>
+  <Config Name="TUNNEL_TOKEN" Target="TUNNEL_TOKEN" Default="" Mode="" Description="Token for the tunnel you created in the Cloudflare Zero Trust dashboard" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+</Container>
