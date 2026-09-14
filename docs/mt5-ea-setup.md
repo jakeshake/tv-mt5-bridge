@@ -29,11 +29,24 @@ auto-provisions it using the scripts in `mt5-windows/oem/`.
 5. Creates a Startup-folder shortcut so MT5 launches automatically on every
    boot with that config.
 
-**This has not been verified end-to-end on real hardware by anyone other
-than through documentation review.** The MT5 terminal's silent-install flags
-and the `[Experts]`/`[StartUp]` ini keys match MetaTrader 5's documented
-"configuration at start" conventions, but terminal builds change. After
-first boot:
+**Partially verified live** (2026-09-13, against a real dockur/windows
+instance on Jake's Unraid box) -- steps 1-2 have real fixes behind them now,
+steps 3-6 are still only documentation-reviewed. Two concrete things found
+by actually running this:
+
+- **`mt5setup.exe /auto` is not fully silent.** It still shows a
+  license-agreement screen and a finish screen that each need a click. The
+  script handles this with a SendKeys loop, but that loop depends on
+  `install.bat` running elevated/as SYSTEM already (dockur/windows' normal
+  first-logon context) -- SendKeys cannot dismiss an actual UAC *consent*
+  prompt (that runs on the secure desktop). If provisioning seems to hang,
+  open the noVNC viewer and check for a stuck UAC dialog first.
+- **The ding9736/MQL5-ZeroMQ repo's layout** is `Core/*.mqh` + `ZeroMQ.mqh`
+  at the repo root, not the `Include/ZeroMQ/` layout its own README
+  describes -- confirmed and fixed; verified the files land at
+  `C:\MT5\MQL5\Include\ZeroMQ\ZeroMQ.mqh` and `\Core\*.mqh`.
+
+After first boot:
 
 1. Open the noVNC viewer at `http://<host>:8006` to watch the Windows
    desktop directly.
@@ -41,6 +54,18 @@ first boot:
 3. Confirm in the terminal itself (**Tools > Options > Expert Advisors**)
    that "Allow Algo Trading" and "Allow DLL imports" are both checked, and
    that the EA shows a green face icon on its chart (not a red X).
+
+### If you're troubleshooting manually via noVNC
+
+The noVNC session's keyboard forwarding drops the Shift modifier for
+typed/pasted keystrokes in at least this setup -- `:`, uppercase letters,
+and other shifted characters can arrive as their unshifted equivalent (e.g.
+`:` becomes `;`, `|` becomes `\`). PowerShell commands are case-insensitive
+so lowercase-only commands still work, but avoid typing colons or pipes
+directly; instead `cd \` to root then use relative paths, and use the
+noVNC sidebar's clipboard panel (or open Chrome inside the VM and use
+"Save As" / "Open in Terminal" to avoid typing paths at all) rather than
+typing a full command with special characters at the console.
 
 ## Manual fallback
 

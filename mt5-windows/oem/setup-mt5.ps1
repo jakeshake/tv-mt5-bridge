@@ -1,17 +1,36 @@
 # Provisions MT5 + the ZeroMQ EA inside the dockur/windows VM.
 #
-# NOTE ON CONFIDENCE: steps 1-4 below were run live against a real
-# dockur/windows instance (Jake's Unraid box) on 2026-09-13 and fixed up
-# based on what actually happened, notably:
+# NOTE ON CONFIDENCE: steps 1-2 were run live twice against a real
+# dockur/windows instance (Jake's Unraid box, 2026-09-13) and fixed up
+# based on what actually happened:
 #   - mt5setup.exe's /auto flag does NOT make it fully silent -- it still
 #     shows a license-agreement screen and a finish screen that each need
-#     a click. Automated below via SendKeys since MetaQuotes doesn't
-#     document a fully-silent flag. This SendKeys loop has not itself been
-#     re-verified after being added -- watch provision.log / the noVNC
-#     console on first boot.
+#     a click. First fix (tracking Start-Process's PID) was WRONG and
+#     confirmed broken on the second live run: under UAC elevation that
+#     PID is the non-elevated launcher stub, which exits as soon as it
+#     hands off to the real installer, so the script sailed past the
+#     dialog without clicking it while the dialog sat there waiting. Now
+#     polls for the setup window by title and for terminal64.exe's
+#     existence instead -- this second approach has NOT itself had a full
+#     clean live run yet, only the folder-structure fix below has been
+#     confirmed working end to end.
+#   - This all assumes install.bat runs elevated/as SYSTEM already (dockur/
+#     windows' normal first-logon context) so no UAC *consent* prompt is
+#     in the way -- SendKeys cannot click that (secure desktop). Every
+#     live test run here hit that consent prompt because it was run
+#     manually from a non-elevated session, which is not representative
+#     of production -- if this hangs for real users, check for a stuck
+#     UAC prompt via the noVNC/RDP console first.
 #   - The ding9736/MQL5-ZeroMQ repo's actual layout is Core/*.mqh +
 #     ZeroMQ.mqh at the repo root (the library's own README describes an
-#     older "ZeroMQ folder" layout that no longer matches) -- fixed below.
+#     older "ZeroMQ folder" layout that no longer matches) -- fixed below
+#     and CONFIRMED on the second live run (verified files landed at
+#     C:\MT5\MQL5\Include\ZeroMQ\ZeroMQ.mqh and \Core\*.mqh).
+#   - The installer's "Finish" screen auto-launches its own non-portable
+#     terminal64 (using %AppData% instead of portable mode) and opens a
+#     browser to an MQL5.com registration page -- confirmed live. The
+#     stray terminal64 is killed below before our own portable launch;
+#     the browser tab is harmless and left alone.
 # Steps 5-6 (startup ini + auto-launch) are still unverified -- watch
 # provision.log on first boot and confirm Algo Trading / DLL imports end
 # up enabled (Tools > Options > Expert Advisors inside the terminal)
@@ -39,24 +58,37 @@ $mt5Setup = "C:\OEM\mt5setup.exe"
 Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile $mt5Setup
 
 Write-Host "Installing MT5 to $InstallDir ..."
-$installProc = Start-Process -FilePath $mt5Setup -ArgumentList "/auto", "/dir=`"$InstallDir`"" -PassThru
+Start-Process -FilePath $mt5Setup -ArgumentList "/auto", "/dir=`"$InstallDir`""
 
 # /auto still shows a license-agreement screen and a finish screen that
-# each need a click (confirmed live) -- send Enter to whichever setup
-# window has focus every couple seconds until the process exits.
+# each need a click (confirmed live). Poll for the setup window BY TITLE
+# rather than tracking Start-Process's returned PID: under UAC elevation
+# that PID is the non-elevated launcher stub, which exits as soon as it
+# hands off to the real (elevated) installer process, so HasExited
+# becomes true almost immediately and the loop would exit having clicked
+# nothing (confirmed live -- the script sailed past this step while the
+# real dialog sat waiting on screen). Detect real completion via
+# terminal64.exe existing instead of any process handle.
+#
+# This assumes install.bat itself runs elevated/as SYSTEM (dockur/windows'
+# normal first-logon provisioning context) so no UAC consent prompt is in
+# the way -- SendKeys cannot click that dialog (it runs on the secure
+# desktop). If this hangs, check the noVNC/RDP console for a stuck UAC
+# prompt.
 $wshell = New-Object -ComObject WScript.Shell
+$terminalExe = Join-Path $InstallDir "terminal64.exe"
 $deadline = (Get-Date).AddMinutes(5)
-while (-not $installProc.HasExited -and (Get-Date) -lt $deadline) {
+while (-not (Test-Path $terminalExe) -and (Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 2
-    if ($wshell.AppActivate($installProc.Id)) {
+    if ($wshell.AppActivate("MetaTrader 5 Setup")) {
         Start-Sleep -Milliseconds 500
         $wshell.SendKeys("{ENTER}")
     }
 }
-if (-not $installProc.HasExited) {
-    Write-Host "WARNING: MT5 installer still running after 5 minutes -- check the desktop."
-    $installProc.WaitForExit()
+if (-not (Test-Path $terminalExe)) {
+    throw "MT5 installer did not finish within 5 minutes -- check the noVNC/RDP console for a stuck dialog."
 }
+Start-Sleep -Seconds 3
 
 # The installer's "Finish" screen auto-launches a non-portable terminal64
 # and opens a browser registration page (confirmed live) -- neither is
