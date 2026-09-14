@@ -1,8 +1,12 @@
 # Provisions MT5 + the ZeroMQ EA inside the dockur/windows VM.
 #
-# NOTE ON CONFIDENCE: steps 1-4 were run live four times against a real
+# NOTE ON CONFIDENCE: steps 1-4 were run live five times against a real
 # dockur/windows instance (Jake's Unraid box, 2026-09-13/14), each run
-# fixing a real bug the previous one exposed:
+# fixing a real bug the previous one exposed. The FULL pipeline (steps 1-6,
+# EA compiling and auto-attaching to a chart via the startup ini) was
+# confirmed working end to end on run 4 -- MT5's own Experts log then
+# surfaced bug #6 below (the EA loaded but failed to initialize), which is
+# the most recent fix and has NOT itself had a live re-run yet:
 #   1. mt5setup.exe's /auto flag does NOT make it fully silent -- it still
 #      shows a license-agreement screen and a finish screen that each need
 #      a click. First fix (tracking Start-Process's PID) was WRONG: under
@@ -39,10 +43,22 @@
 #      to an MQL5.com registration page. The stray terminal64 is killed
 #      below before our own portable launch; the browser tab is harmless
 #      and left alone.
-# Step 4's /portable fix has NOT itself been re-verified with a live run
-# yet. Steps 5-6 (startup ini + auto-launch) are STILL unverified -- watch
-# provision.log on first boot and confirm Algo Trading / DLL imports end
-# up enabled (Tools > Options > Expert Advisors inside the terminal)
+#   6. On run 4, the startup ini DID successfully auto-attach the EA
+#      (Journal: "expert TradingViewZeroMQExecutor (EURUSD,M1) loaded
+#      successfully") -- real progress, steps 1-5 all confirmed working.
+#      But MT5's Experts log then showed it immediately failing to
+#      initialize and getting removed: "cannot load '...\libzmq.dll'
+#      [126]" (both DLLs verified present, correct size, right folder --
+#      error 126 is Windows' "a dependency of this DLL is missing", not
+#      "file not found"). libzmq.dll is a native C++ build needing the
+#      Visual C++ runtime, which a fresh Windows image doesn't ship with.
+#      Fixed by installing the official redistributable before the EA
+#      ever tries to load it.
+# Steps 5-6 (startup ini + auto-launch) are otherwise confirmed working --
+# only the libzmq.dll dependency (bug #6) still needs a clean live re-run.
+# Watch provision.log and the Experts tab (not just the main Journal) on
+# first boot, and confirm Algo Trading / DLL imports end up enabled
+# (Tools > Options > Expert Advisors inside the terminal)
 # before trusting this unattended. See docs/mt5-ea-setup.md for the
 # manual fallback steps.
 
@@ -146,6 +162,20 @@ New-Item -ItemType Directory -Force -Path $zmqIncludeDest | Out-Null
 Copy-Item -Path (Join-Path $zmqRoot.FullName "ZeroMQ.mqh") -Destination $zmqIncludeDest -Force
 Copy-Item -Path (Join-Path $zmqRoot.FullName "Core") -Destination $zmqIncludeDest -Recurse -Force
 Copy-Item -Path (Join-Path $zmqRoot.FullName "Libraries\*.dll") -Destination $LibrariesDir -Force
+
+# CONFIRMED LIVE (fifth run, 2026-09-14): the EA loaded but its own Experts
+# log showed "cannot load '...\libzmq.dll' [126]" (both DLLs verified
+# present, correct size, right folder -- error 126 is Windows' "a required
+# module for this DLL couldn't be found", i.e. one of libzmq.dll's own
+# dependencies is missing) followed by "unresolved import function call".
+# libzmq.dll is a native C++ build and needs the Visual C++ runtime
+# (vcruntime140.dll / msvcp140.dll), which a fresh Windows image doesn't
+# ship with. Installing the official redistributable before the EA ever
+# tries to load the DLL. This exact fix has NOT yet had its own live run.
+Write-Host "Installing Visual C++ runtime (libzmq.dll dependency)..."
+$vcRedist = "C:\OEM\vc_redist.x64.exe"
+Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $vcRedist
+Start-Process -FilePath $vcRedist -ArgumentList "/install", "/quiet", "/norestart" -Wait
 
 # ---------------------------------------------------------------------------
 # 3. Drop in the EA source + default settings preset.

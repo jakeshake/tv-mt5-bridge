@@ -21,7 +21,8 @@ auto-provisions it using the scripts in `mt5-windows/oem/`.
    for why), with a live fallback search if a future installer build ever
    changes that default.
 2. Downloads the [ding9736/MQL5-ZeroMQ](https://github.com/ding9736/MQL5-ZeroMQ)
-   library and places the headers/DLLs where the EA expects them.
+   library and places the headers/DLLs where the EA expects them, and
+   installs the Visual C++ runtime those DLLs need (see below for why).
 3. Copies in `TradingViewZeroMQExecutor.mq5` and its default `.set` preset,
    then compiles the EA headlessly via MetaEditor.
 4. Writes a startup config (`$InstallDir\config\startup.ini`) that enables
@@ -31,11 +32,14 @@ auto-provisions it using the scripts in `mt5-windows/oem/`.
    boot with that config, in portable mode (so its MQL5 data folder is
    `$InstallDir\MQL5`, next to the binaries).
 
-**Verified live across four separate runs** (2026-09-13/14, against a real
-dockur/windows instance on Jake's Unraid box) -- steps 1-4 each got a real
-bug fixed based on what actually happened when run for real; steps 5-6 are
-still only documentation-reviewed. Four concrete bugs found and fixed by
-actually running this:
+**Verified live across five separate runs** (2026-09-13/14, against a real
+dockur/windows instance on Jake's Unraid box). The full pipeline -- MT5
+installing, the EA compiling, and the startup ini auto-attaching it to a
+chart -- was confirmed working end to end on run 4 (Journal: "expert
+TradingViewZeroMQExecutor (EURUSD,M1) loaded successfully"). MT5's own
+**Experts log tab** (not the main Journal tab) then surfaced one more real
+bug, fixed on run 5 but not yet re-verified live. Six concrete bugs found
+and fixed by actually running this:
 
 - **`mt5setup.exe /auto` is not fully silent.** It still shows a
   license-agreement screen and a finish screen that each need a click. The
@@ -65,8 +69,17 @@ actually running this:
   data folder, not `$InstallDir\MQL5\Include` where step 2 actually placed
   the ZeroMQ files. Compile failed with `error 106: file ... not found`
   even though the file genuinely existed, just not where MetaEditor was
-  looking. This exact fix (adding `/portable` to the compile command) has
-  not yet had its own clean live re-run.
+  looking. Confirmed fixed -- the EA compiled and auto-attached correctly
+  on the next run.
+- **`libzmq.dll` needs the Visual C++ runtime, which a fresh Windows image
+  doesn't have.** With everything else finally working, MT5's **Experts**
+  log tab (not the main Journal -- check both) showed the EA loading, then
+  immediately failing: `cannot load '...\libzmq.dll' [126]`. Both DLLs
+  were verified present, correct size, right folder -- error 126 means a
+  *dependency* of the DLL is missing, not the DLL itself. libzmq.dll is a
+  native C++ build needing `vcruntime140.dll`/`msvcp140.dll`. Fixed by
+  installing the official `vc_redist.x64.exe` before the EA ever tries to
+  load it. This exact fix has not yet had its own live re-run.
 
 After first boot:
 
@@ -76,6 +89,9 @@ After first boot:
 3. Confirm in the terminal itself (**Tools > Options > Expert Advisors**)
    that "Allow Algo Trading" and "Allow DLL imports" are both checked, and
    that the EA shows a green face icon on its chart (not a red X).
+4. Check the **Experts** tab at the bottom of the terminal (not just
+   Journal) -- that's where the EA's own ZeroMQ startup log and any DLL
+   load errors actually show up.
 
 ### If you're troubleshooting manually via noVNC
 
