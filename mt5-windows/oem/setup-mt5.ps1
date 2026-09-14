@@ -1,12 +1,14 @@
 # Provisions MT5 + the ZeroMQ EA inside the dockur/windows VM.
 #
-# NOTE ON CONFIDENCE: steps 1-4 were run live five times against a real
-# dockur/windows instance (Jake's Unraid box, 2026-09-13/14), each run
-# fixing a real bug the previous one exposed. The FULL pipeline (steps 1-6,
-# EA compiling and auto-attaching to a chart via the startup ini) was
-# confirmed working end to end on run 4 -- MT5's own Experts log then
-# surfaced bug #6 below (the EA loaded but failed to initialize), which is
-# the most recent fix and has NOT itself had a live re-run yet:
+# NOTE ON CONFIDENCE: run live six times against a real dockur/windows
+# instance (Jake's Unraid box, 2026-09-13/14), each run fixing a real bug
+# the previous one exposed. Run 6 was FULLY CLEAN end to end: MT5
+# installed, the EA compiled, the startup ini auto-attached it to a chart,
+# and its own [ZMQ] log confirmed "OK: ZeroMQ PULL socket bound to:
+# tcp://*:5555" / "Waiting for signals from Flask..." with zero errors in
+# either the Journal or Experts tabs. The firewall rule below (bug #7) is
+# the one thing added after that clean run and hasn't itself been
+# re-verified live, since Windows only prompts for it once per install:
 #   1. mt5setup.exe's /auto flag does NOT make it fully silent -- it still
 #      shows a license-agreement screen and a finish screen that each need
 #      a click. First fix (tracking Start-Process's PID) was WRONG: under
@@ -53,14 +55,19 @@
 #      "file not found"). libzmq.dll is a native C++ build needing the
 #      Visual C++ runtime, which a fresh Windows image doesn't ship with.
 #      Fixed by installing the official redistributable before the EA
-#      ever tries to load it.
-# Steps 5-6 (startup ini + auto-launch) are otherwise confirmed working --
-# only the libzmq.dll dependency (bug #6) still needs a clean live re-run.
+#      ever tries to load it -- CONFIRMED fixed on run 6 (see above).
+#   7. Binding the ZeroMQ PULL socket triggers a "Windows Security --
+#      allow this app on public/private networks?" firewall prompt on
+#      first launch (clicked through manually during run 6). Nothing here
+#      can click that unattended for real users, and if it's never
+#      answered the port may stay blocked for connections from outside
+#      the VM. Added an inbound firewall rule for port 5555 ahead of time
+#      so Windows never needs to ask -- not yet re-verified live.
 # Watch provision.log and the Experts tab (not just the main Journal) on
 # first boot, and confirm Algo Trading / DLL imports end up enabled
-# (Tools > Options > Expert Advisors inside the terminal)
-# before trusting this unattended. See docs/mt5-ea-setup.md for the
-# manual fallback steps.
+# (Tools > Options > Expert Advisors inside the terminal) before trusting
+# this fully unattended. See docs/mt5-ea-setup.md for the manual fallback
+# steps.
 
 $ErrorActionPreference = "Stop"
 
@@ -200,6 +207,17 @@ Copy-Item -Path "C:\OEM\TradingViewZeroMQExecutor.set" -Destination (Join-Path $
 Write-Host "Compiling EA..."
 $metaEditor = Join-Path $InstallDir "metaeditor64.exe"
 Start-Process -FilePath $metaEditor -ArgumentList "/compile:`"$ExpertsDir\TradingViewZeroMQExecutor.mq5`"", "/portable", "/log:`"C:\OEM\compile.log`"" -Wait
+
+# CONFIRMED LIVE (sixth run, 2026-09-14): the EA binding its ZeroMQ PULL
+# socket triggers an interactive "Windows Security -- allow this app on
+# public/private networks?" firewall prompt on first launch. Clicking
+# through it manually worked, but nothing here can click it unattended
+# for real users, and if it's never answered the port may stay blocked
+# for connections from outside the VM (i.e. from signal-bridge). Adding
+# an inbound firewall rule for the port ahead of time so Windows never
+# needs to ask.
+Write-Host "Pre-authorizing ZeroMQ port 5555 through Windows Firewall..."
+New-NetFirewallRule -DisplayName "MT5 ZeroMQ (tv-mt5-bridge)" -Direction Inbound -Protocol TCP -LocalPort 5555 -Action Allow -ErrorAction SilentlyContinue | Out-Null
 
 # ---------------------------------------------------------------------------
 # 5. Startup config: enable Algo Trading + DLL imports, auto-attach the EA.

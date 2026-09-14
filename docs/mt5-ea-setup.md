@@ -32,14 +32,16 @@ auto-provisions it using the scripts in `mt5-windows/oem/`.
    boot with that config, in portable mode (so its MQL5 data folder is
    `$InstallDir\MQL5`, next to the binaries).
 
-**Verified live across five separate runs** (2026-09-13/14, against a real
-dockur/windows instance on Jake's Unraid box). The full pipeline -- MT5
-installing, the EA compiling, and the startup ini auto-attaching it to a
-chart -- was confirmed working end to end on run 4 (Journal: "expert
-TradingViewZeroMQExecutor (EURUSD,M1) loaded successfully"). MT5's own
-**Experts log tab** (not the main Journal tab) then surfaced one more real
-bug, fixed on run 5 but not yet re-verified live. Six concrete bugs found
-and fixed by actually running this:
+**Verified live across six separate runs** (2026-09-13/14, against a real
+dockur/windows instance on Jake's Unraid box), the last one **fully
+clean**: MT5 installed, the EA compiled, the startup ini auto-attached it
+to a chart, and its own `[ZMQ]` log confirmed
+`OK: ZeroMQ PULL socket bound to: tcp://*:5555` / `Waiting for signals
+from Flask...` with zero errors in either the Journal or Experts tabs.
+Seven concrete bugs were found and fixed along the way by actually
+running this (the seventh, a Windows Firewall prompt, was added right
+after that clean run and hasn't itself had a live re-run, since Windows
+only asks once per install):
 
 - **`mt5setup.exe /auto` is not fully silent.** It still shows a
   license-agreement screen and a finish screen that each need a click. The
@@ -79,7 +81,15 @@ and fixed by actually running this:
   *dependency* of the DLL is missing, not the DLL itself. libzmq.dll is a
   native C++ build needing `vcruntime140.dll`/`msvcp140.dll`. Fixed by
   installing the official `vc_redist.x64.exe` before the EA ever tries to
-  load it. This exact fix has not yet had its own live re-run.
+  load it. **Confirmed fixed** -- the next run's Experts log showed the EA
+  binding its PULL socket successfully with zero errors.
+- **Binding the ZeroMQ socket triggers a Windows Firewall prompt** ("allow
+  this app on public/private networks?") on first launch -- confirmed
+  live, clicked through manually. Nothing here can click that unattended
+  for real users, and if it's never answered the port may stay blocked
+  for connections from outside the VM (i.e. from signal-bridge). Added an
+  inbound firewall rule for port 5555 ahead of time so Windows never needs
+  to ask. Not yet re-verified live.
 
 After first boot:
 
