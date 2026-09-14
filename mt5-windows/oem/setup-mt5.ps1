@@ -1,37 +1,36 @@
 # Provisions MT5 + the ZeroMQ EA inside the dockur/windows VM.
 #
-# NOTE ON CONFIDENCE: steps 1-2 were run live twice against a real
-# dockur/windows instance (Jake's Unraid box, 2026-09-13) and fixed up
-# based on what actually happened:
-#   - mt5setup.exe's /auto flag does NOT make it fully silent -- it still
-#     shows a license-agreement screen and a finish screen that each need
-#     a click. First fix (tracking Start-Process's PID) was WRONG and
-#     confirmed broken on the second live run: under UAC elevation that
-#     PID is the non-elevated launcher stub, which exits as soon as it
-#     hands off to the real installer, so the script sailed past the
-#     dialog without clicking it while the dialog sat there waiting. Now
-#     polls for the setup window by title and for terminal64.exe's
-#     existence instead -- this second approach has NOT itself had a full
-#     clean live run yet, only the folder-structure fix below has been
-#     confirmed working end to end.
-#   - This all assumes install.bat runs elevated/as SYSTEM already (dockur/
-#     windows' normal first-logon context) so no UAC *consent* prompt is
-#     in the way -- SendKeys cannot click that (secure desktop). Every
-#     live test run here hit that consent prompt because it was run
-#     manually from a non-elevated session, which is not representative
-#     of production -- if this hangs for real users, check for a stuck
-#     UAC prompt via the noVNC/RDP console first.
-#   - The ding9736/MQL5-ZeroMQ repo's actual layout is Core/*.mqh +
-#     ZeroMQ.mqh at the repo root (the library's own README describes an
-#     older "ZeroMQ folder" layout that no longer matches) -- fixed below
-#     and CONFIRMED on the second live run (verified files landed at
-#     C:\MT5\MQL5\Include\ZeroMQ\ZeroMQ.mqh and \Core\*.mqh).
-#   - The installer's "Finish" screen auto-launches its own non-portable
-#     terminal64 (using %AppData% instead of portable mode) and opens a
-#     browser to an MQL5.com registration page -- confirmed live. The
-#     stray terminal64 is killed below before our own portable launch;
-#     the browser tab is harmless and left alone.
-# Steps 5-6 (startup ini + auto-launch) are still unverified -- watch
+# NOTE ON CONFIDENCE: steps 1-4 were run live three times against a real
+# dockur/windows instance (Jake's Unraid box, 2026-09-13), each run fixing
+# a real bug the previous one exposed:
+#   1. mt5setup.exe's /auto flag does NOT make it fully silent -- it still
+#      shows a license-agreement screen and a finish screen that each need
+#      a click. First fix (tracking Start-Process's PID) was WRONG: under
+#      UAC elevation that PID is the non-elevated launcher stub, which
+#      exits as soon as it hands off to the real installer, so the script
+#      sailed past the dialog without clicking it. Fixed to poll for the
+#      setup window by title and for terminal64.exe's existence instead --
+#      CONFIRMED working on the third run (ran unattended from an already-
+#      elevated shell with no UAC prompt in the way, which is meant to
+#      mirror install.bat's normal SYSTEM/elevated execution context).
+#   2. The ding9736/MQL5-ZeroMQ repo's actual layout is Core/*.mqh +
+#      ZeroMQ.mqh at the repo root (the library's own README describes an
+#      older "ZeroMQ folder" layout that no longer matches) -- fixed and
+#      CONFIRMED (files land at $InstallDir\MQL5\Include\ZeroMQ\ZeroMQ.mqh
+#      and \Core\*.mqh).
+#   3. BIG one: mt5setup.exe's /dir= argument is silently IGNORED -- it
+#      always installs to the fixed "C:\Program Files\MetaTrader 5"
+#      location below regardless of what /dir says (confirmed via the
+#      installer's own per-user data-folder origin.txt, which recorded
+#      that exact path even though /dir asked for C:\MT5). $InstallDir is
+#      no longer a folder this script invents; it's the real install
+#      location, found dynamically if the default ever changes.
+#   4. The installer's "Finish" screen auto-launches its own non-portable
+#      terminal64 (using %AppData%, not portable mode) and opens a browser
+#      to an MQL5.com registration page. The stray terminal64 is killed
+#      below before our own portable launch; the browser tab is harmless
+#      and left alone.
+# Steps 5-6 (startup ini + auto-launch) are STILL unverified -- watch
 # provision.log on first boot and confirm Algo Trading / DLL imports end
 # up enabled (Tools > Options > Expert Advisors inside the terminal)
 # before trusting this unattended. See docs/mt5-ea-setup.md for the
@@ -39,14 +38,19 @@
 
 $ErrorActionPreference = "Stop"
 
-$InstallDir   = "C:\MT5"
+# CONFIRMED LIVE (third run, 2026-09-13): mt5setup.exe's /dir= argument is
+# silently IGNORED by this installer build -- it always installs the
+# terminal64.exe/metaeditor64.exe binaries to the fixed default location
+# below regardless of what /dir says (verified via the installer's own
+# data-folder origin.txt, which recorded this exact path). The original
+# script assumed /dir would let us pick C:\MT5; that assumption was wrong,
+# so /dir is no longer passed at all and this fixed path is used instead.
+$InstallDir   = "C:\Program Files\MetaTrader 5"
 $MqlDir       = Join-Path $InstallDir "MQL5"
 $ExpertsDir   = Join-Path $MqlDir "Experts"
 $IncludeDir   = Join-Path $MqlDir "Include"
 $LibrariesDir = Join-Path $MqlDir "Libraries"
 $ConfigDir    = Join-Path $InstallDir "config"
-
-New-Item -ItemType Directory -Force -Path $InstallDir, $ExpertsDir, $IncludeDir, $LibrariesDir, $ConfigDir | Out-Null
 
 # ---------------------------------------------------------------------------
 # 1. Install the MT5 terminal (generic MetaQuotes build; you log into your
@@ -57,8 +61,8 @@ Write-Host "Downloading MT5 installer..."
 $mt5Setup = "C:\OEM\mt5setup.exe"
 Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile $mt5Setup
 
-Write-Host "Installing MT5 to $InstallDir ..."
-Start-Process -FilePath $mt5Setup -ArgumentList "/auto", "/dir=`"$InstallDir`""
+Write-Host "Installing MT5 (expected at $InstallDir) ..."
+Start-Process -FilePath $mt5Setup -ArgumentList "/auto"
 
 # /auto still shows a license-agreement screen and a finish screen that
 # each need a click (confirmed live). Poll for the setup window BY TITLE
@@ -86,9 +90,25 @@ while (-not (Test-Path $terminalExe) -and (Get-Date) -lt $deadline) {
     }
 }
 if (-not (Test-Path $terminalExe)) {
-    throw "MT5 installer did not finish within 5 minutes -- check the noVNC/RDP console for a stuck dialog."
+    # Fallback in case a future installer build changes its default path
+    # again -- search Program Files rather than assume and fail outright.
+    $found = Get-ChildItem "C:\Program Files*" -Filter terminal64.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) {
+        $InstallDir = $found.DirectoryName
+        $MqlDir = Join-Path $InstallDir "MQL5"
+        $ExpertsDir = Join-Path $MqlDir "Experts"
+        $IncludeDir = Join-Path $MqlDir "Include"
+        $LibrariesDir = Join-Path $MqlDir "Libraries"
+        $ConfigDir = Join-Path $InstallDir "config"
+        $terminalExe = $found.FullName
+        Write-Host "terminal64.exe not at the expected default path -- found it at $InstallDir instead."
+    } else {
+        throw "MT5 installer did not finish within 5 minutes and terminal64.exe wasn't found anywhere under Program Files -- check the noVNC/RDP console for a stuck dialog."
+    }
 }
 Start-Sleep -Seconds 3
+
+New-Item -ItemType Directory -Force -Path $ExpertsDir, $IncludeDir, $LibrariesDir, $ConfigDir | Out-Null
 
 # The installer's "Finish" screen auto-launches a non-portable terminal64
 # and opens a browser registration page (confirmed live) -- neither is
@@ -162,7 +182,8 @@ Period=M1
 
 # ---------------------------------------------------------------------------
 # 6. Launch on every login, in portable mode (keeps MQL5 data under
-#    C:\MT5\MQL5 instead of a randomly-hashed AppData folder).
+#    $InstallDir\MQL5, next to the binaries, instead of a randomly-hashed
+#    AppData folder).
 # ---------------------------------------------------------------------------
 $startupFolder = [Environment]::GetFolderPath("Startup")
 $shortcutPath = Join-Path $startupFolder "MT5.lnk"

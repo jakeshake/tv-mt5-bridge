@@ -16,35 +16,48 @@ auto-provisions it using the scripts in `mt5-windows/oem/`.
 
 ## What gets automated (`mt5-windows/oem/setup-mt5.ps1`)
 
-1. Downloads and silently installs the generic MetaQuotes MT5 terminal to
-   `C:\MT5` (portable mode, so all data lives under `C:\MT5\MQL5` instead of
-   a hashed AppData folder).
+1. Downloads and installs the generic MetaQuotes MT5 terminal. It actually
+   lands at the fixed `C:\Program Files\MetaTrader 5` location (see below
+   for why), with a live fallback search if a future installer build ever
+   changes that default.
 2. Downloads the [ding9736/MQL5-ZeroMQ](https://github.com/ding9736/MQL5-ZeroMQ)
    library and places the headers/DLLs where the EA expects them.
 3. Copies in `TradingViewZeroMQExecutor.mq5` and its default `.set` preset,
    then compiles the EA headlessly via MetaEditor.
-4. Writes a startup config (`C:\MT5\config\startup.ini`) that enables Algo
-   Trading + DLL imports and attaches the EA to a chart, using
+4. Writes a startup config (`$InstallDir\config\startup.ini`) that enables
+   Algo Trading + DLL imports and attaches the EA to a chart, using
    `MT5_LOGIN`/`MT5_PASSWORD`/`MT5_SERVER`/`MT5_SYMBOL` from your `.env`.
 5. Creates a Startup-folder shortcut so MT5 launches automatically on every
-   boot with that config.
+   boot with that config, in portable mode (so its MQL5 data folder is
+   `$InstallDir\MQL5`, next to the binaries).
 
-**Partially verified live** (2026-09-13, against a real dockur/windows
-instance on Jake's Unraid box) -- steps 1-2 have real fixes behind them now,
-steps 3-6 are still only documentation-reviewed. Two concrete things found
-by actually running this:
+**Verified live in three separate runs** (2026-09-13, against a real
+dockur/windows instance on Jake's Unraid box) -- steps 1-4 each got a real
+bug fixed based on what actually happened when run for real; steps 5-6 are
+still only documentation-reviewed. Three concrete bugs found and fixed by
+actually running this:
 
 - **`mt5setup.exe /auto` is not fully silent.** It still shows a
   license-agreement screen and a finish screen that each need a click. The
-  script handles this with a SendKeys loop, but that loop depends on
-  `install.bat` running elevated/as SYSTEM already (dockur/windows' normal
-  first-logon context) -- SendKeys cannot dismiss an actual UAC *consent*
-  prompt (that runs on the secure desktop). If provisioning seems to hang,
-  open the noVNC viewer and check for a stuck UAC dialog first.
+  script handles this with a SendKeys loop that depends on `install.bat`
+  running elevated/as SYSTEM already (dockur/windows' normal first-logon
+  context) -- SendKeys cannot dismiss an actual UAC *consent* prompt (that
+  runs on the secure desktop). Confirmed working end-to-end when run
+  unattended from an already-elevated shell (no UAC prompt in the way). If
+  provisioning seems to hang, open the noVNC viewer and check for a stuck
+  UAC dialog first.
 - **The ding9736/MQL5-ZeroMQ repo's layout** is `Core/*.mqh` + `ZeroMQ.mqh`
   at the repo root, not the `Include/ZeroMQ/` layout its own README
   describes -- confirmed and fixed; verified the files land at
-  `C:\MT5\MQL5\Include\ZeroMQ\ZeroMQ.mqh` and `\Core\*.mqh`.
+  `$InstallDir\MQL5\Include\ZeroMQ\ZeroMQ.mqh` and `\Core\*.mqh`.
+- **`mt5setup.exe`'s `/dir=` argument is silently ignored.** No matter what
+  path you pass, this installer build always puts terminal64.exe and
+  metaeditor64.exe at `C:\Program Files\MetaTrader 5` (confirmed by reading
+  the installer's own per-user data-folder `origin.txt`, which recorded
+  that real path even though `/dir` asked for something else). The script
+  no longer tries to redirect the install location -- it targets the real
+  default path directly, with a one-time search fallback if that default
+  ever changes in a future installer build.
 
 After first boot:
 
