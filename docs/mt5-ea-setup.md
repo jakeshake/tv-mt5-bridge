@@ -31,10 +31,10 @@ auto-provisions it using the scripts in `mt5-windows/oem/`.
    boot with that config, in portable mode (so its MQL5 data folder is
    `$InstallDir\MQL5`, next to the binaries).
 
-**Verified live in three separate runs** (2026-09-13, against a real
+**Verified live across four separate runs** (2026-09-13/14, against a real
 dockur/windows instance on Jake's Unraid box) -- steps 1-4 each got a real
 bug fixed based on what actually happened when run for real; steps 5-6 are
-still only documentation-reviewed. Three concrete bugs found and fixed by
+still only documentation-reviewed. Four concrete bugs found and fixed by
 actually running this:
 
 - **`mt5setup.exe /auto` is not fully silent.** It still shows a
@@ -58,6 +58,15 @@ actually running this:
   no longer tries to redirect the install location -- it targets the real
   default path directly, with a one-time search fallback if that default
   ever changes in a future installer build.
+- **`metaeditor64.exe` needs `/portable` too, not just the terminal
+  launch.** The EA's `#include <ZeroMQ/ZeroMQ.mqh>` (angle brackets) always
+  resolves against whatever MQL5 data folder the terminal/editor is
+  currently assigned -- without `/portable` that's the normal `%AppData%`
+  data folder, not `$InstallDir\MQL5\Include` where step 2 actually placed
+  the ZeroMQ files. Compile failed with `error 106: file ... not found`
+  even though the file genuinely existed, just not where MetaEditor was
+  looking. This exact fix (adding `/portable` to the compile command) has
+  not yet had its own clean live re-run.
 
 After first boot:
 

@@ -1,8 +1,8 @@
 # Provisions MT5 + the ZeroMQ EA inside the dockur/windows VM.
 #
-# NOTE ON CONFIDENCE: steps 1-4 were run live three times against a real
-# dockur/windows instance (Jake's Unraid box, 2026-09-13), each run fixing
-# a real bug the previous one exposed:
+# NOTE ON CONFIDENCE: steps 1-4 were run live four times against a real
+# dockur/windows instance (Jake's Unraid box, 2026-09-13/14), each run
+# fixing a real bug the previous one exposed:
 #   1. mt5setup.exe's /auto flag does NOT make it fully silent -- it still
 #      shows a license-agreement screen and a finish screen that each need
 #      a click. First fix (tracking Start-Process's PID) was WRONG: under
@@ -10,9 +10,9 @@
 #      exits as soon as it hands off to the real installer, so the script
 #      sailed past the dialog without clicking it. Fixed to poll for the
 #      setup window by title and for terminal64.exe's existence instead --
-#      CONFIRMED working on the third run (ran unattended from an already-
-#      elevated shell with no UAC prompt in the way, which is meant to
-#      mirror install.bat's normal SYSTEM/elevated execution context).
+#      CONFIRMED working when run unattended from an already-elevated
+#      shell with no UAC prompt in the way, which is meant to mirror
+#      install.bat's normal SYSTEM/elevated execution context.
 #   2. The ding9736/MQL5-ZeroMQ repo's actual layout is Core/*.mqh +
 #      ZeroMQ.mqh at the repo root (the library's own README describes an
 #      older "ZeroMQ folder" layout that no longer matches) -- fixed and
@@ -25,12 +25,22 @@
 #      that exact path even though /dir asked for C:\MT5). $InstallDir is
 #      no longer a folder this script invents; it's the real install
 #      location, found dynamically if the default ever changes.
-#   4. The installer's "Finish" screen auto-launches its own non-portable
+#   4. Another one: metaeditor64.exe, run WITHOUT /portable, resolves the
+#      EA's #include <ZeroMQ/ZeroMQ.mqh> (angle brackets always resolve
+#      against the terminal's *assigned data folder*, never against
+#      $InstallDir directly) against the normal %AppData% data folder --
+#      not $InstallDir\MQL5\Include, where step 2 actually put the ZeroMQ
+#      files. Compile failed with "error 106: file ... not found" even
+#      though the file genuinely existed, just not where MetaEditor was
+#      looking. Fixed by adding /portable to the compile invocation too,
+#      matching step 6's already-portable terminal64 launch.
+#   5. The installer's "Finish" screen auto-launches its own non-portable
 #      terminal64 (using %AppData%, not portable mode) and opens a browser
 #      to an MQL5.com registration page. The stray terminal64 is killed
 #      below before our own portable launch; the browser tab is harmless
 #      and left alone.
-# Steps 5-6 (startup ini + auto-launch) are STILL unverified -- watch
+# Step 4's /portable fix has NOT itself been re-verified with a live run
+# yet. Steps 5-6 (startup ini + auto-launch) are STILL unverified -- watch
 # provision.log on first boot and confirm Algo Trading / DLL imports end
 # up enabled (Tools > Options > Expert Advisors inside the terminal)
 # before trusting this unattended. See docs/mt5-ea-setup.md for the
@@ -148,9 +158,18 @@ Copy-Item -Path "C:\OEM\TradingViewZeroMQExecutor.set" -Destination (Join-Path $
 # ---------------------------------------------------------------------------
 # 4. Compile the EA headlessly via MetaEditor.
 # ---------------------------------------------------------------------------
+# CONFIRMED LIVE (fourth run, 2026-09-14): without /portable here, MetaEditor
+# resolves the EA's #include <ZeroMQ/ZeroMQ.mqh> (angle brackets -- always
+# relative to the terminal's assigned MQL5\Include, never to $InstallDir)
+# against the terminal's normal %AppData% data folder instead of
+# $InstallDir\MQL5\Include, where step 2 actually put the ZeroMQ files --
+# compile failed with "error 106: file ... not found" even though the file
+# genuinely existed, just in the folder MetaEditor wasn't looking in.
+# /portable makes it use $InstallDir\MQL5 instead, matching step 2's target
+# and step 6's /portable launch.
 Write-Host "Compiling EA..."
 $metaEditor = Join-Path $InstallDir "metaeditor64.exe"
-Start-Process -FilePath $metaEditor -ArgumentList "/compile:`"$ExpertsDir\TradingViewZeroMQExecutor.mq5`"", "/log:`"C:\OEM\compile.log`"" -Wait
+Start-Process -FilePath $metaEditor -ArgumentList "/compile:`"$ExpertsDir\TradingViewZeroMQExecutor.mq5`"", "/portable", "/log:`"C:\OEM\compile.log`"" -Wait
 
 # ---------------------------------------------------------------------------
 # 5. Startup config: enable Algo Trading + DLL imports, auto-attach the EA.
